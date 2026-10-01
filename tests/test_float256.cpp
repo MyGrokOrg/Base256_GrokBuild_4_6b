@@ -310,6 +310,73 @@ int main() {
         CHECK(base256::hypot(float256::inf(), float256(1)).isinf());
         CHECK(!base256::hypot(float256::inf(), float256(1)).signbit());
         CHECK(base256::hypot(float256::qnan(), float256(1)).isnan());
+        CHECK(base256::hypot(float256::inf(), float256::qnan()).isinf());
+        CHECK(base256::hypot(float256::qnan(), float256::inf()).isinf());
+    }
+
+    // --- pow of signed zero and negative bases -----------------------------
+    {
+        const float256 nz = float256::zero(true);
+        const float256 p3 = base256::pow(nz, float256(3));
+        CHECK(p3.iszero() && p3.signbit());
+        const float256 p2 = base256::pow(nz, float256(2));
+        CHECK(p2.iszero() && !p2.signbit());
+        const float256 n1 = base256::pow(nz, -float256::one());
+        CHECK(n1.isinf() && n1.signbit());
+        const float256 n2 = base256::pow(nz, -float256::two());
+        CHECK(n2.isinf() && !n2.signbit());
+        CHECK(base256::pow(-float256::two(), float256(3)) == -float256(8));
+        CHECK(base256::pow(-float256::two(), float256::half()).isnan());
+    }
+
+    // --- atan2 on infinities -----------------------------------------------
+    {
+        const float256 pinf = float256::inf();
+        const float256 ninf = float256::inf(true);
+        const float256 pi4 = float256::pi() * float256::half() * float256::half();
+        CHECK(base256::atan2(pinf, pinf) == pi4);
+        CHECK(base256::atan2(ninf, pinf) == -pi4);
+        CHECK(base256::atan2(pinf, ninf) == pi4 * float256(3));
+        CHECK(base256::atan2(ninf, ninf) == -(pi4 * float256(3)));
+        CHECK(base256::atan2(float256::one(), pinf).iszero());
+        CHECK(!base256::atan2(float256::one(), pinf).signbit());
+        CHECK(base256::atan2(float256::one(), ninf) == float256::pi());
+    }
+
+    // --- trig at exact multiples of the library π --------------------------
+    {
+        CHECK(base256::sin(float256::pi()).iszero() && !base256::sin(float256::pi()).signbit());
+        CHECK(base256::sin(-float256::pi()).iszero() && base256::sin(-float256::pi()).signbit());
+        CHECK(base256::cos(float256::pi() * float256::half()).iszero());
+        CHECK(!base256::cos(float256::pi() * float256::half()).signbit());
+        CHECK(base256::cos(float256::pi()) == -float256::one());
+        CHECK(base256::tan(float256::pi()).iszero() && !base256::tan(float256::pi()).signbit());
+        CHECK(base256::tan(float256::pi() * float256::half()).isinf());
+        CHECK(!base256::tan(float256::pi() * float256::half()).signbit());
+    }
+
+    // --- rint (ties to even), modf, nextup ---------------------------------
+    {
+        CHECK(base256::rint(float256(1.5)) == float256(2));
+        CHECK(base256::rint(float256(2.5)) == float256(2));
+        CHECK(base256::rint(float256(3.5)) == float256(4));
+        CHECK(base256::rint(float256(-1.5)) == float256(-2));
+        CHECK(base256::rint(float256(-2.5)) == float256(-2));
+        CHECK(base256::rint(float256::half()).iszero() && !base256::rint(float256::half()).signbit());
+        CHECK(base256::rint(-float256::half()).iszero() && base256::rint(-float256::half()).signbit());
+        CHECK(base256::round(float256(2.5)) == float256(3));
+
+        float256 ip;
+        CHECK(base256::modf(float256(3.25), &ip) == float256(0.25));
+        CHECK(ip == float256(3));
+        CHECK(base256::modf(float256(-3.25), &ip) == float256(-0.25));
+        CHECK(ip == float256(-3));
+        const float256 zf = base256::modf(float256::inf(true), &ip);
+        CHECK(ip.isinf() && ip.signbit());
+        CHECK(zf.iszero() && zf.signbit());
+
+        CHECK(base256::nextup(float256::one()) == base256::nextafter(float256::one(), float256::inf()));
+        CHECK(base256::nextdown(float256::one()) == base256::nextafter(float256::one(), -float256::inf()));
     }
 
     std::cout << "passed=" << g_pass << " failed=" << g_fails << "\n";

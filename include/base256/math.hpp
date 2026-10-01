@@ -10,6 +10,15 @@
 namespace base256 {
 namespace detail_math {
 
+[[nodiscard]] inline bool is_odd_integer(float256 y) noexcept {
+    if (!y.isfinite()) return false;
+    const float256 yi = trunc(y);
+    if (yi != y) return false;
+    // |y| >= 2^237 is a multiple of a large power of two, hence even.
+    const float256 half_i = yi * float256::half();
+    return trunc(half_i) != half_i;
+}
+
 [[nodiscard]] inline float256 taylor_exp(float256 r) {
     // exp(r) for |r| <= ln2/2 ≈ 0.347
     float256 term = float256::one();
@@ -160,18 +169,17 @@ namespace detail_math {
     if (x.isnan() || y.isnan()) return float256::qnan();
     if (y.iszero()) return float256::one();
     if (x.iszero()) {
-        if (y.signbit()) return float256::inf(false);
-        return float256::zero();
+        const bool odd = detail_math::is_odd_integer(y);
+        if (y.signbit()) {
+            // pow(±0, −odd) = ±∞; otherwise +∞.
+            return odd ? float256::inf(x.signbit()) : float256::inf(false);
+        }
+        return odd ? float256::zero(x.signbit()) : float256::zero(false);
     }
     if (x.signbit()) {
-        // integer power?
-        const float256 yi = trunc(y);
-        if (yi != y) return float256::qnan(); // non-integer of negative
+        if (trunc(y) != y) return float256::qnan();
         const float256 p = exp(y * log(abs(x)));
-        // odd integer -> negative
-        const float256 two = float256::two();
-        const float256 half_odd = yi / two;
-        if (trunc(half_odd) != half_odd) return -p;
+        if (detail_math::is_odd_integer(y)) return -p;
         return p;
     }
     return exp(y * log(x));
@@ -241,6 +249,16 @@ namespace detail_math {
     int quad = 0;
     const bool neg = x.signbit();
     float256 r = reduce_trig(x, quad);
+    // Exact multiples of π/2 reduce to 0. Taylor then yields a spurious −0
+    // in the odd quadrants (sin(π), cos(π/2)).
+    if (r.iszero()) {
+        switch (quad) {
+            case 0: return copysign(float256::zero(), x);
+            case 1: return neg ? -float256::one() : float256::one();
+            case 2: return copysign(float256::zero(), x);
+            default: return neg ? float256::one() : -float256::one();
+        }
+    }
     float256 s, c;
     s = detail_math::taylor_sin(r);
     c = detail_math::taylor_cos(r);
@@ -260,6 +278,14 @@ namespace detail_math {
     if (x.iszero()) return float256::one();
     int quad = 0;
     float256 r = reduce_trig(x, quad);
+    if (r.iszero()) {
+        switch (quad) {
+            case 0: return float256::one();
+            case 1: return float256::zero();
+            case 2: return -float256::one();
+            default: return float256::zero();
+        }
+    }
     const float256 s = detail_math::taylor_sin(r);
     const float256 c = detail_math::taylor_cos(r);
     switch (quad) {
@@ -271,6 +297,17 @@ namespace detail_math {
 }
 
 [[nodiscard]] inline float256 tan(float256 x) {
+    if (x.isnan()) return x;
+    if (x.isinf()) return float256::qnan();
+    if (x.iszero()) return x;
+    int quad = 0;
+    const float256 r = reduce_trig(x, quad);
+    if (r.iszero()) {
+        // Exact multiple of π/2. Even quadrants are kπ (signed zero);
+        // odd quadrants are the poles.
+        if ((quad & 1) == 0) return copysign(float256::zero(), x);
+        return float256::inf(x.signbit());
+    }
     return sin(x) / cos(x);
 }
 
@@ -318,6 +355,17 @@ namespace detail_math {
 
 [[nodiscard]] inline float256 atan2(float256 y, float256 x) {
     if (x.isnan() || y.isnan()) return float256::qnan();
+    if (y.isinf() && x.isinf()) {
+        // atan2(±∞, +∞) = ±π/4, atan2(±∞, −∞) = ±3π/4
+        const float256 pi4 = float256::pi() * float256::half() * float256::half();
+        const float256 mag = x.signbit() ? pi4 * float256::from_int(3) : pi4;
+        return copysign(mag, y);
+    }
+    if (x.isinf()) {
+        if (x.signbit()) return copysign(float256::pi(), y);
+        return copysign(float256::zero(), y);
+    }
+    if (y.isinf()) return copysign(float256::pi() * float256::half(), y);
     if (x.iszero() && y.iszero()) {
         if (x.signbit()) return copysign(float256::pi(), y);
         return y; // ±0
@@ -377,7 +425,7 @@ namespace detail_math {
     if (x.isnan() || y.isnan()) return float256::qnan();
     if (y.iszero() || x.isinf()) return float256::qnan();
     if (y.isinf()) return x;
-    const float256 q = round(x / y); // ties away; remainder uses RN-even but close
+    const float256 q = rint(x / y); // remainder: ties to even
     return x - q * y;
 }
 

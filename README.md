@@ -28,7 +28,7 @@ Header-only. Real 256-bit software arithmetic — not a `double` wrapper.
 - Conversions to/from `float`, `double`, integers, decimal, and C99 hex-float
 - `std::numeric_limits<float256>` (`is_iec559 == true`)
 - Elementary functions: `exp`, `log`, `pow`, `sin`/`cos`/`tan`, `atan`/`asin`/`acos`, hyperbolics, `cbrt`
-- `ldexp`, `frexp`, `ilogb`, `nextafter`, `floor`/`ceil`/`trunc`/`round`, `hypot`, `fmod`
+- `ldexp`, `frexp`, `ilogb`, `nextafter` / `nextup` / `nextdown`, `floor`/`ceil`/`trunc`/`round` (ties away), `rint` (ties to even), `modf`, `hypot`, `fmod`, `remainder`
 - User-defined literals `3.1415_f256` and `"0.1"_f256`
 
 ## Install
@@ -91,10 +91,12 @@ Words are little-endian `std::array<std::uint64_t,4>` (`[0]` is the least-signif
 
 ## Rounding and compliance
 
-Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. `to_string` prints a correctly scaled scientific form (the exponent is corrected when a value sits just below a power of ten). `hypot` is scaled, so `hypot(2^200000, 2^200000)` stays finite. `fmin` / `fmax` follow IEEE 754 signed-zero rules (`fmin(+0, −0) = −0`). Elementary transcendental functions target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle).
+Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. `rint` follows that mode; `round` is half away from zero, matching C `round`. `to_string` prints a correctly scaled scientific form (the exponent is corrected when a value sits just below a power of ten). `hypot` is scaled, so `hypot(2^200000, 2^200000)` stays finite, and `hypot(∞, NaN)` is `+∞`. `fmin` / `fmax` follow IEEE 754 signed-zero rules (`fmin(+0, −0) = −0`). `pow(−0, odd)` keeps the sign of zero. Elementary transcendental functions target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle). Exact multiples of this library's π reduce cleanly: `sin(π)` is `+0` and `cos(π/2)` is `+0`.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+**4.6.2** — `pow` signed zero, `atan2` on infinities, `sin`/`cos`/`tan` at exact multiples of π, plus `rint`, `modf`, `nextup`, and `nextdown`. See [CHANGELOG](CHANGELOG.md).
 
 Created by Craig D. Mansfield, PhD, EI (MyGrokOrg).

@@ -104,6 +104,7 @@ private:
     friend constexpr float256 floor(float256) noexcept;
     friend constexpr float256 ceil(float256) noexcept;
     friend constexpr float256 round(float256) noexcept;
+    friend constexpr float256 rint(float256) noexcept;
     friend constexpr int ilogb(float256) noexcept;
     friend constexpr float256 logb(float256) noexcept;
 
@@ -1311,9 +1312,70 @@ inline std::string float256::to_bit_string() const {
     return t;
 }
 
+// Round to nearest integer, ties to even (the default binary256 mode).
+[[nodiscard]] constexpr float256 rint(float256 x) noexcept {
+    using namespace detail;
+    Unpacked u = x.unpack();
+    if (u.kind != Kind::normal && u.kind != Kind::subnormal) return x;
+    if (u.wexp >= kPrecision - 1) return x;
+    if (u.wexp < -1) return float256::zero(u.sign);
+    if (u.wexp < 0) {
+        // |x| ∈ [0.5, 1). Exact ±0.5 ties to even, which is 0.
+        const bool tie = u.wexp == -1 && (u.sig << 1).is_zero();
+        if (tie) return float256::zero(u.sign);
+        return u.sign ? -float256::one() : float256::one();
+    }
+    const int unit = 255 - u.wexp;
+    const bool guard = u.sig.bit(unit - 1);
+    bool sticky = false;
+    for (int i = 0; i < unit - 1; ++i) {
+        if (u.sig.bit(i)) { sticky = true; break; }
+    }
+    const bool odd = u.sig.bit(unit);
+    u.sig = (u.sig >> unit) << unit;
+    u.sticky = false;
+    u.kind = Kind::normal;
+    if (guard && (sticky || odd)) {
+        u256 one{};
+        one.set_bit(unit);
+        std::uint64_t carry = 0;
+        u.sig = add_u256(u.sig, one, carry);
+        if (carry) {
+            u.sig = {};
+            u.sig.set_bit(255);
+            ++u.wexp;
+        }
+    }
+    return float256::from_unpacked(u);
+}
+
+// Integer part in *iptr, signed fraction returned. modf(±∞) yields ±0.
+[[nodiscard]] constexpr float256 modf(float256 x, float256* iptr) noexcept {
+    if (x.isnan()) {
+        if (iptr) *iptr = x;
+        return x;
+    }
+    if (x.isinf()) {
+        if (iptr) *iptr = x;
+        return float256::zero(x.signbit());
+    }
+    const float256 i = trunc(x);
+    if (iptr) *iptr = i;
+    if (x == i) return float256::zero(x.signbit());
+    return x - i;
+}
+
+[[nodiscard]] constexpr float256 nextup(float256 x) noexcept {
+    return nextafter(x, float256::inf(false));
+}
+[[nodiscard]] constexpr float256 nextdown(float256 x) noexcept {
+    return nextafter(x, float256::inf(true));
+}
+
 [[nodiscard]] inline float256 hypot(float256 x, float256 y) noexcept {
-    if (x.isnan()) return x;
-    if (y.isnan()) return y;
+    // IEEE 754: hypot(∞, qNaN) = hypot(qNaN, ∞) = +∞.
+    if (x.isnan()) return y.isinf() ? float256::inf(false) : x;
+    if (y.isnan()) return x.isinf() ? float256::inf(false) : y;
     if (x.isinf() || y.isinf()) return float256::inf(false);
     x = abs(x);
     y = abs(y);
