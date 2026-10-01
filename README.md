@@ -27,8 +27,8 @@ Header-only. Real 256-bit software arithmetic — not a `double` wrapper.
 - Unordered NaN comparisons (`std::partial_ordering`) and `+0 == −0`
 - Conversions to/from `float`, `double`, integers, decimal, and C99 hex-float
 - `std::numeric_limits<float256>` (`is_iec559 == true`)
-- Elementary functions: `exp`, `log`, `pow`, `sin`/`cos`/`tan`, `atan`/`asin`/`acos`, hyperbolics, `cbrt`
-- `ldexp`, `frexp`, `ilogb`, `nextafter` / `nextup` / `nextdown`, `floor`/`ceil`/`trunc`/`round` (ties away), `rint` (ties to even), `modf`, `hypot`, `fmod`, `remainder`
+- Elementary functions: `exp`, `log`, `pow`, `sin`/`cos`/`tan`, `atan`/`asin`/`acos`, hyperbolics and inverse hyperbolics, `cbrt`
+- `ldexp`, `frexp`, `ilogb` / `logb`, `nextafter` / `nextup` / `nextdown`, `floor`/`ceil`/`trunc`/`round` (ties away), `rint` / `nearbyint` (ties to even), `modf`, `hypot`, `fmod`, `remainder`, `fdim`
 - User-defined literals `3.1415_f256` and `"0.1"_f256`
 
 ## Install
@@ -97,6 +97,6 @@ Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divid
 
 MIT — see [LICENSE](LICENSE).
 
-**4.6.2** — `pow` signed zero, `atan2` on infinities, `sin`/`cos`/`tan` at exact multiples of π, plus `rint`, `modf`, `nextup`, and `nextdown`. See [CHANGELOG](CHANGELOG.md).
+**4.6.3** — inverse hyperbolics, `fdim`, `logb`, and `nearbyint`. See [CHANGELOG](CHANGELOG.md).
 
 Created by Craig D. Mansfield, PhD, EI (MyGrokOrg).
