@@ -141,6 +141,32 @@ public:
         normalize();
     }
 
+    // Shift right by `bits`. Returns true if any 1-bit was discarded.
+    bool shr_sticky(int bits) {
+        if (bits <= 0 || is_zero()) return false;
+        if (bits >= bit_length()) {
+            d.clear();
+            return true;
+        }
+        bool sticky = false;
+        const int limbs = bits / 32;
+        const int b = bits % 32;
+        const int n = static_cast<int>(d.size());
+        const int whole = limbs < n ? limbs : n;
+        for (int i = 0; i < whole; ++i) {
+            if (d[static_cast<std::size_t>(i)] != 0) {
+                sticky = true;
+                break;
+            }
+        }
+        if (!sticky && b != 0 && limbs < n) {
+            const std::uint32_t mask = (1u << b) - 1u;
+            if ((d[static_cast<std::size_t>(limbs)] & mask) != 0) sticky = true;
+        }
+        shr(bits);
+        return sticky;
+    }
+
     // Divide by 10, return remainder 0-9.
     std::uint32_t divmod10() {
         if (is_zero()) return 0;

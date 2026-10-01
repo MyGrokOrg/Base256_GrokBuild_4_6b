@@ -91,7 +91,7 @@ Words are little-endian `std::array<std::uint64_t,4>` (`[0]` is the least-signif
 
 ## Rounding and compliance
 
-Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. Elementary transcendental functions target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle).
+Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. `to_string` prints a correctly scaled scientific form (the exponent is corrected when a value sits just below a power of ten). `hypot` is scaled, so `hypot(2^200000, 2^200000)` stays finite. `fmin` / `fmax` follow IEEE 754 signed-zero rules (`fmin(+0, −0) = −0`). Elementary transcendental functions target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle).
 
 ## License
 

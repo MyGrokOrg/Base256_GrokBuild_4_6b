@@ -1042,38 +1042,53 @@ inline std::string float256::to_string(int precision) const {
             if (te2 >= 0) {
                 num.shl(te2);
             } else {
-                num.shr(-te2);
+                sticky = num.shr_sticky(-te2);
             }
         }
         return {num.to_dec(), sticky};
     };
 
-    auto [digs1, sticky1] = digits_at(n - precision);
-    std::string core = digs1;
-    if (!core.empty()) {
-        const int last = core.back() - '0';
-        core.pop_back();
-        bool inc = last > 5 || (last == 5 && (sticky1 || (!core.empty() && ((core.back() - '0') & 1))));
+    // The double log10 estimate is off by one near powers of ten (the top 53
+    // significand bits can sit on the wrong side of an integer boundary).
+    // Regenerate until floor(|v| / 10^(n-precision)) has exactly precision+1
+    // digits, then round ties-to-even using the extra digit and any sticky bit.
+    std::string core;
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        auto [digs, sticky1] = digits_at(n - precision);
+        if (digs == "0") {
+            n -= precision > 4 ? precision : 4;
+            continue;
+        }
+        const int want = precision + 1;
+        const int got = static_cast<int>(digs.size());
+        if (got != want) {
+            n += got - want;
+            continue;
+        }
+        const int last = digs.back() - '0';
+        digs.pop_back();
+        const bool odd = !digs.empty() && ((digs.back() - '0') & 1);
+        const bool inc = last > 5 || (last == 5 && (sticky1 || odd));
         if (inc) {
-            int i = static_cast<int>(core.size()) - 1;
-            while (i >= 0) {
-                if (core[static_cast<std::size_t>(i)] < '9') {
-                    ++core[static_cast<std::size_t>(i)];
-                    break;
-                }
-                core[static_cast<std::size_t>(i)] = '0';
+            int i = static_cast<int>(digs.size()) - 1;
+            while (i >= 0 && digs[static_cast<std::size_t>(i)] == '9') {
+                digs[static_cast<std::size_t>(i)] = '0';
                 --i;
             }
             if (i < 0) {
-                core.insert(core.begin(), '1');
+                digs.assign(static_cast<std::size_t>(precision), '0');
+                digs[0] = '1';
                 ++n;
+            } else {
+                ++digs[static_cast<std::size_t>(i)];
             }
         }
+        core = std::move(digs);
+        break;
     }
-    if (core.empty()) core = "0";
-    if (static_cast<int>(core.size()) > precision) {
-        core = core.substr(0, static_cast<std::size_t>(precision));
-    }
+    if (core.empty()) core.assign(static_cast<std::size_t>(precision), '0');
+    if (static_cast<int>(core.size()) > precision)
+        core.resize(static_cast<std::size_t>(precision));
     while (static_cast<int>(core.size()) < precision) core.push_back('0');
 
     std::string out;
@@ -1158,11 +1173,17 @@ inline std::string float256::to_bit_string() const {
 [[nodiscard]] constexpr float256 fmin(float256 a, float256 b) noexcept {
     if (a.isnan()) return b;
     if (b.isnan()) return a;
+    // IEEE 754: minNum of opposite-signed zeros is −0.
+    if (a.iszero() && b.iszero())
+        return float256::zero(a.signbit() || b.signbit());
     return a < b ? a : b;
 }
 [[nodiscard]] constexpr float256 fmax(float256 a, float256 b) noexcept {
     if (a.isnan()) return b;
     if (b.isnan()) return a;
+    // IEEE 754: maxNum of opposite-signed zeros is +0.
+    if (a.iszero() && b.iszero())
+        return float256::zero(a.signbit() && b.signbit());
     return a > b ? a : b;
 }
 
@@ -1291,7 +1312,22 @@ inline std::string float256::to_bit_string() const {
 }
 
 [[nodiscard]] inline float256 hypot(float256 x, float256 y) noexcept {
-    return sqrt(x * x + y * y);
+    if (x.isnan()) return x;
+    if (y.isnan()) return y;
+    if (x.isinf() || y.isinf()) return float256::inf(false);
+    x = abs(x);
+    y = abs(y);
+    if (y > x) {
+        const float256 t = x;
+        x = y;
+        y = t;
+    }
+    if (x.iszero()) return float256::zero();
+    // Scale into [0.5, 1) so x² + y² cannot overflow or underflow.
+    int ex = 0;
+    const float256 xm = frexp(x, &ex);
+    const float256 ym = ldexp(y, -ex);
+    return ldexp(sqrt(xm * xm + ym * ym), ex);
 }
 
 } // namespace base256

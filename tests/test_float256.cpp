@@ -253,6 +253,65 @@ int main() {
         CHECK(*p == float256::pi());
     }
 
+    // --- decimal round-trip of powers of ten (to_string exponent) ---------
+    {
+        int pow_fail = 0;
+        for (int e = -40; e <= 40; ++e) {
+            const std::string src = "1e" + std::to_string(e);
+            auto p = float256::parse(src);
+            if (!p) { ++pow_fail; continue; }
+            const std::string printed = p->to_string(73);
+            auto q = float256::parse(printed);
+            if (!q || *q != *p) ++pow_fail;
+            // The printed scientific exponent must be the true order of magnitude.
+            const std::string shortp = p->to_string(8);
+            const auto ep = shortp.rfind('e');
+            if (ep == std::string::npos || std::stoi(shortp.substr(ep + 1)) != e)
+                ++pow_fail;
+        }
+        CHECK(pow_fail == 0);
+        const auto hundredth = float256::parse("0.01");
+        CHECK(hundredth.has_value());
+        CHECK(hundredth->to_string(8).find("1.0000000e-2") != std::string::npos);
+        const auto tiny = float256::parse("1e-28");
+        CHECK(tiny.has_value());
+        CHECK(tiny->to_string(12).find("e-28") != std::string::npos);
+    }
+
+    // --- fmin / fmax signed zero (IEEE 754 minNum / maxNum) ----------------
+    {
+        const float256 pz = float256::zero(false);
+        const float256 nz = float256::zero(true);
+        CHECK(base256::fmin(pz, nz).signbit());
+        CHECK(base256::fmin(nz, pz).signbit());
+        CHECK(!base256::fmax(pz, nz).signbit());
+        CHECK(!base256::fmax(nz, pz).signbit());
+        CHECK(base256::fmin(float256(2), float256::qnan()) == float256(2));
+        CHECK(base256::fmax(float256::qnan(), float256(-3)) == float256(-3));
+    }
+
+    // --- hypot does not overflow or underflow on a pure scale -------------
+    {
+        const float256 big = base256::ldexp(float256::one(), 200000);
+        const float256 h = base256::hypot(big, big);
+        CHECK(h.isfinite());
+        const float256 expect = big * float256::sqrt2();
+        const float256 ulp = base256::ldexp(float256::one(), 200000 - 236);
+        CHECK(base256::abs(h - expect) <= ulp * float256(4));
+
+        const float256 tiny = base256::ldexp(float256::one(), -200000);
+        const float256 ht = base256::hypot(tiny, tiny);
+        CHECK(ht.isfinite());
+        CHECK(!ht.iszero());
+        const float256 expect_t = tiny * float256::sqrt2();
+        CHECK(base256::abs(ht - expect_t) <=
+              base256::ldexp(float256::one(), -200000 - 236) * float256(4));
+
+        CHECK(base256::hypot(float256::inf(), float256(1)).isinf());
+        CHECK(!base256::hypot(float256::inf(), float256(1)).signbit());
+        CHECK(base256::hypot(float256::qnan(), float256(1)).isnan());
+    }
+
     std::cout << "passed=" << g_pass << " failed=" << g_fails << "\n";
     return g_fails ? 1 : 0;
 }
