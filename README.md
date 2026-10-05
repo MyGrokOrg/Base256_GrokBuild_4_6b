@@ -27,7 +27,7 @@ Header-only. Real 256-bit software arithmetic — not a `double` wrapper.
 - Unordered NaN comparisons (`std::partial_ordering`) and `+0 == −0`
 - Conversions to/from `float`, `double`, integers, decimal, and C99 hex-float
 - `std::numeric_limits<float256>` (`is_iec559 == true`)
-- Elementary functions: `exp`, `log`, `pow`, `sin`/`cos`/`tan`, `atan`/`asin`/`acos`, hyperbolics and inverse hyperbolics, `cbrt`
+- Elementary functions: `exp`, `log`, `pow`, `sin`/`cos`/`tan`, `atan`/`asin`/`acos`, hyperbolics and inverse hyperbolics, `cbrt`, `erf`/`erfc`
 - `ldexp`, `frexp`, `ilogb` / `logb`, `nextafter` / `nextup` / `nextdown`, `floor`/`ceil`/`trunc`/`round` (ties away), `rint` / `nearbyint` (ties to even), `modf`, `hypot`, `fmod`, `remainder`, `fdim`
 - User-defined literals `3.1415_f256` and `"0.1"_f256`
 
@@ -91,12 +91,12 @@ Words are little-endian `std::array<std::uint64_t,4>` (`[0]` is the least-signif
 
 ## Rounding and compliance
 
-Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. `rint` follows that mode; `round` is half away from zero, matching C `round`. `to_string` prints a correctly scaled scientific form (the exponent is corrected when a value sits just below a power of ten). `hypot` is scaled, so `hypot(2^200000, 2^200000)` stays finite, and `hypot(∞, NaN)` is `+∞`. `fmin` / `fmax` follow IEEE 754 signed-zero rules (`fmin(+0, −0) = −0`). `pow(−0, odd)` keeps the sign of zero. Elementary transcendental functions target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle). Exact multiples of this library's π reduce cleanly: `sin(π)` is `+0` and `cos(π/2)` is `+0`.
+Default rounding is IEEE 754 **roundTiesToEven**. Add, subtract, multiply, divide, fused multiply-add, square root, and conversions from integers/decimal apply that mode. `rint` follows that mode; `round` is half away from zero, matching C `round`. `to_string` prints a correctly scaled scientific form (the exponent is corrected when a value sits just below a power of ten). `hypot` is scaled, so `hypot(2^200000, 2^200000)` stays finite, and `hypot(∞, NaN)` is `+∞`. `fmin` / `fmax` follow IEEE 754 signed-zero rules (`fmin(+0, −0) = −0`). `pow(−0, odd)` keeps the sign of zero. `exp2` on integers and `log2` on powers of two are exact. `tanh` of a huge finite value is `±1` (it does not overflow into NaN). Elementary transcendental functions, including `erf` / `erfc`, target a few ulps on the primary domain; trigonometric range reduction uses a 256-bit 2π (very large arguments lose low bits of the reduced angle). Exact multiples of this library's π reduce cleanly: `sin(π)` is `+0` and `cos(π/2)` is `+0`.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
-**4.6.3** — inverse hyperbolics, `fdim`, `logb`, and `nearbyint`. See [CHANGELOG](CHANGELOG.md).
+**4.6.4** — `erf`/`erfc`, exact `exp2`/`log2` on dyadic integers, and a `tanh` overflow fix. See [CHANGELOG](CHANGELOG.md).
 
 Created by Craig D. Mansfield, PhD, EI (MyGrokOrg).

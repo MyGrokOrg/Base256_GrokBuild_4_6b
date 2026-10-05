@@ -86,6 +86,14 @@ namespace detail_math {
 [[nodiscard]] inline float256 exp2(float256 x) {
     if (x.isnan()) return x;
     if (x.isinf()) return x.signbit() ? float256::zero() : x;
+    if (x.iszero()) return float256::one();
+    // 2^n is exact for every integer n in the binary256 exponent range.
+    if (trunc(x) == x) {
+        const double nd = x.to_double();
+        if (!(nd <= 300000.0)) return float256::inf(false);
+        if (nd < -300000.0) return float256::zero(false);
+        return ldexp(float256::one(), static_cast<int>(nd));
+    }
     return exp(x * float256::ln2());
 }
 
@@ -140,7 +148,19 @@ namespace detail_math {
     return float256::from_int(static_cast<std::int64_t>(adj)) * float256::ln2() + log_m;
 }
 
-[[nodiscard]] inline float256 log2(float256 x) { return log(x) * float256::log2e(); }
+[[nodiscard]] inline float256 log2(float256 x) {
+    if (x.isnan()) return x;
+    if (x.signbit() && !x.iszero()) return float256::qnan();
+    if (x.iszero()) return float256::inf(true);
+    if (x.isinf()) return x;
+    // frexp returns m in [0.5, 1) with x = m * 2^e, so a pure power of two
+    // is m == 0.5 and log2(x) = e - 1 exactly.
+    int e = 0;
+    const float256 m = frexp(x, &e);
+    if (m == float256::half())
+        return float256::from_int(static_cast<std::int64_t>(e) - 1);
+    return log(x) * float256::log2e();
+}
 [[nodiscard]] inline float256 log10(float256 x) { return log(x) * float256::log10e(); }
 
 [[nodiscard]] inline float256 log1p(float256 x) {
@@ -396,21 +416,42 @@ namespace detail_math {
 
 [[nodiscard]] inline float256 sinh(float256 x) {
     if (x.isnan() || x.isinf() || x.iszero()) return x;
-    const float256 e = exp(x);
-    return (e - float256::one() / e) * float256::half();
+    const float256 a = abs(x);
+    float256 y;
+    if (a < float256::one()) {
+        // (e^a - e^{-a})/2 = (em + em/(em+1))/2, exact in expm1.
+        // exp(a) - exp(-a) cancels the whole result when |a| << 1.
+        const float256 em = expm1(a);
+        y = (em + em / (em + float256::one())) * float256::half();
+    } else {
+        const float256 e = exp(a);
+        y = (e - float256::one() / e) * float256::half();
+    }
+    return x.signbit() ? -y : y;
 }
 [[nodiscard]] inline float256 cosh(float256 x) {
     if (x.isnan()) return x;
     if (x.isinf()) return float256::inf(false);
-    const float256 e = exp(abs(x));
+    const float256 a = abs(x);
+    if (a < float256::one()) {
+        // cosh(x) = 1 + 2 sinh(x/2)^2 keeps the departure from 1.
+        const float256 s = sinh(a * float256::half());
+        return float256::one() + (s + s) * s;
+    }
+    const float256 e = exp(a);
     return (e + float256::one() / e) * float256::half();
 }
 [[nodiscard]] inline float256 tanh(float256 x) {
     if (x.isnan()) return x;
     if (x.isinf()) return copysign(float256::one(), x);
     if (x.iszero()) return x;
-    const float256 e = exp(x + x);
-    return (e - float256::one()) / (e + float256::one());
+    const float256 a = abs(x);
+    // 1 - tanh(x) ≈ 2 exp(-2|x|) drops below ½ ulp(1) once |x| >= 83,
+    // so the result is exactly ±1. Below that, exp(2x) is still finite;
+    // past it, exp(2x) overflows and (inf-1)/(inf+1) would be NaN.
+    if (a >= float256::from_int(83)) return copysign(float256::one(), x);
+    const float256 e = expm1(x + x);
+    return e / (e + float256::two());
 }
 
 [[nodiscard]] inline float256 fmod(float256 x, float256 y) {
